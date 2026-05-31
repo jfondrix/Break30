@@ -12,16 +12,11 @@ class Program
     private static NotifyIcon trayIcon;
     private static bool _running = true;
     private static DateTime? lastTriggered = null;
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    static extern bool FreeConsole();
+    private static DateTime pauseUntil = DateTime.MinValue;
 
     [STAThread]
     static void Main()
     {
-        FreeConsole();
-
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
 
@@ -36,23 +31,47 @@ class Program
     {
         while (_running)
         {
+            if (DateTime.Now < pauseUntil)
+            {
+                await Task.Delay(10000);
+                continue;
+            }
+
             await WaitUntilNextReminder();
 
             if (!_running)
                 break;
 
-            ShowNotification($"The time is {DateTime.Now:HH:mm}. Good time for a break!");
-
-            await Task.Delay(TimeSpan.FromMinutes(3));
-
-            if (!_running)
-                break;
-
-            ShowNotification($"The time is {DateTime.Now:HH:mm}. Break time finished!");
+            await StartBreak();
         }
-
-        ExitApp();
     }
+
+/*
+    static async Task StartBreak()
+    {
+        ShowNotification($"The time is {DateTime.Now:HH:mm}. Good time for a break!");
+
+        await Task.Delay(TimeSpan.FromMinutes(3));
+
+        if (!_running)
+            return;
+
+        ShowNotification($"The time is {DateTime.Now:HH:mm}. Break time finished!");
+    }
+*/
+
+    static async Task StartBreak()
+    {
+        ShowNotification("Break started. 3 minutes.");
+
+        await Task.Delay(TimeSpan.FromMinutes(3));
+
+        if (!_running)
+            return;
+
+        ShowNotification("Break finished.");
+    }
+
 
     static async Task WaitUntilNextReminder()
     {
@@ -60,17 +79,12 @@ class Program
         {
             var now = DateTime.Now;
 
-            bool isReminderTime =
-                now.Minute == 0 ||
-                now.Minute == 30;
+            if (DateTime.Now < pauseUntil)
+                return;
 
-            var slot = new DateTime(
-                now.Year,
-                now.Month,
-                now.Day,
-                now.Hour,
-                now.Minute,
-                0);
+            bool isReminderTime = now.Minute == 0 || now.Minute == 30;
+
+            var slot = new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, 0);
 
             if (isReminderTime && lastTriggered != slot)
             {
@@ -82,9 +96,17 @@ class Program
         }
     }
 
+/*
     static void ShowNotification(string message)
     {
-        MessageBox(IntPtr.Zero, message, "Break Reminder", 0);
+        MessageBox(IntPtr.Zero, message, "Break30", 0);
+    }
+*/
+    static void ShowNotification(string message)
+    {
+        trayIcon.BalloonTipTitle = "Break30";
+        trayIcon.BalloonTipText = message;
+        trayIcon.ShowBalloonTip(5000);
     }
 
     static void CreateTrayIcon()
@@ -93,29 +115,47 @@ class Program
         {
             Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath),
             Visible = true,
-            Text = "Break Reminder"
+            Text = "Break30"
         };
 
-
         var contextMenu = new ContextMenuStrip();
+
+        var startBreakItem = new ToolStripMenuItem(
+            "Start Break Now",
+            null,
+            async (sender, e) => await StartBreak());
+
+        var pause1HourItem = new ToolStripMenuItem(
+            "Pause 1 Hour",
+            null,
+            (sender, e) =>
+            {
+                pauseUntil = DateTime.Now.AddHours(1);
+                ShowNotification("Break reminders paused for 1 hour.");
+            });
+
+        var pause2HoursItem = new ToolStripMenuItem(
+            "Pause 2 Hours",
+            null,
+            (sender, e) =>
+            {
+                pauseUntil = DateTime.Now.AddHours(2);
+                ShowNotification("Break reminders paused for 2 hours.");
+            });
 
         var exitItem = new ToolStripMenuItem(
             "Exit",
             null,
             (sender, e) => ExitApp());
 
+        contextMenu.Items.Add(startBreakItem);
+        contextMenu.Items.Add(new ToolStripSeparator());
+        contextMenu.Items.Add(pause1HourItem);
+        contextMenu.Items.Add(pause2HoursItem);
+        contextMenu.Items.Add(new ToolStripSeparator());
         contextMenu.Items.Add(exitItem);
 
         trayIcon.ContextMenuStrip = contextMenu;
-        trayIcon.MouseClick += TrayIcon_MouseClick;
-    }
-
-    static void TrayIcon_MouseClick(object sender, MouseEventArgs e)
-    {
-        if (e.Button == MouseButtons.Right)
-        {
-            trayIcon.ContextMenuStrip.Show(Cursor.Position);
-        }
     }
 
     static void ExitApp()
@@ -128,6 +168,6 @@ class Program
             trayIcon.Dispose();
         }
 
-        Environment.Exit(0);
+        Application.Exit();
     }
 }
