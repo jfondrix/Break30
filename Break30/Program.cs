@@ -15,6 +15,8 @@ class Program
     private static Settings settings = new Settings();
     private static Random random = new Random();
 
+    private static int breakSessionId = 0;
+
     class Settings
     {
         public int breakLengthMinutes { get; set; } = 3;
@@ -84,28 +86,43 @@ class Program
         }
     }
 
-    static async Task StartBreak()
+
+static async Task StartBreak()
+{
+    int mySession = ++breakSessionId;
+
+    if (DateTime.Now < pauseUntil)
+        return;
+
+    string message = settings.notificationMessages[random.Next(settings.notificationMessages.Length)];
+    ShowNotification(message);
+
+    DateTime deadline = DateTime.Now.AddSeconds(settings.watchForIdleSeconds);
+
+    while (DateTime.Now < deadline)
     {
-        string message = settings.notificationMessages[random.Next(settings.notificationMessages.Length)];
-        ShowNotification(message);
+        if (!_running)
+            return;
 
-        DateTime deadline = DateTime.Now.AddSeconds(settings.watchForIdleSeconds);
+        if (mySession != breakSessionId)
+            return;
 
-        while (DateTime.Now < deadline)
+        if (DateTime.Now < pauseUntil)
+            return;
+
+        if (GetIdleTime() >= TimeSpan.FromSeconds(settings.idleSecondsBeforeFullscreen))
         {
-            if (!_running)
-                return;
-
-            if (GetIdleTime() >= TimeSpan.FromSeconds(settings.idleSecondsBeforeFullscreen))
-            {
-                ShowFullscreenBreakTimer(TimeSpan.FromMinutes(settings.breakLengthMinutes));
-                return;
-            }
-
-            await Task.Delay(1000);
+            ShowFullscreenBreakTimer(TimeSpan.FromMinutes(settings.breakLengthMinutes));
+            return;
         }
-    }
 
+        await Task.Delay(1000);
+    }
+}
+
+
+
+ 
     static TimeSpan GetIdleTime()
     {
         LASTINPUTINFO info = new LASTINPUTINFO();
@@ -241,7 +258,9 @@ class Program
             (sender, e) =>
             {
                 pauseUntil = DateTime.Now.AddHours(1);
+                breakSessionId++;
                 ShowNotification("Paused for 1 hour.");
+
             });
 
         var pause2HoursItem = new ToolStripMenuItem(
@@ -250,6 +269,7 @@ class Program
             (sender, e) =>
             {
                 pauseUntil = DateTime.Now.AddHours(2);
+                breakSessionId++;
                 ShowNotification("Paused for 2 hours.");
             });
 
