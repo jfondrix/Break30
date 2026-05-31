@@ -53,21 +53,29 @@ class Program
         }
     }
 
-    static async Task StartBreak()
+
+static async Task StartBreak()
+{
+    ShowNotification("Stand up now.");
+
+    DateTime deadline = DateTime.Now.AddMinutes(1);
+
+    while (DateTime.Now < deadline)
     {
-        ShowNotification("Stand up now.");
-
-        await Task.Delay(TimeSpan.FromSeconds(10));
-
         if (!_running)
             return;
 
         if (GetIdleTime() >= TimeSpan.FromSeconds(10))
         {
             ShowFullscreenBreakTimer(TimeSpan.FromMinutes(3));
+            return;
         }
-    }
 
+        await Task.Delay(1000);
+    }
+}
+
+ 
     static TimeSpan GetIdleTime()
     {
         LASTINPUTINFO info = new LASTINPUTINFO();
@@ -175,7 +183,7 @@ static void ShowFullscreenBreakTimer(TimeSpan duration)
 }
     static void ShowNotification(string message)
     {
-        trayIcon.BalloonTipTitle = "Break30";
+        trayIcon.BalloonTipTitle = "";
         trayIcon.BalloonTipText = message;
         trayIcon.ShowBalloonTip(5000);
     }
