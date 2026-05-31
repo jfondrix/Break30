@@ -11,6 +11,7 @@ class Program
 
     private static NotifyIcon trayIcon;
     private static bool _running = true;
+    private static DateTime? lastTriggered = null;
 
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -19,25 +20,37 @@ class Program
     [STAThread]
     static void Main()
     {
-        FreeConsole(); // ✅ Hide the console window
+        FreeConsole();
+
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
-        CreateTrayIcon(); // ✅ Add system tray icon
-        Task.Run(ReminderLoop); // ✅ Run reminder loop in background
-        Application.Run(); // ✅ Keep application running for tray icon
+
+        CreateTrayIcon();
+
+        Task.Run(ReminderLoop);
+
+        Application.Run();
     }
 
     static async Task ReminderLoop()
     {
         while (_running)
         {
-            await WaitUntilNextReminder(); // ✅ Uses await now
-            if (!_running) break;
+            await WaitUntilNextReminder();
+
+            if (!_running)
+                break;
+
             ShowNotification($"The time is {DateTime.Now:HH:mm}. Good time for a break!");
-            await Task.Delay(TimeSpan.FromMinutes(3)); // ✅ Keeps async behavior
-            if (!_running) break;
+
+            await Task.Delay(TimeSpan.FromMinutes(3));
+
+            if (!_running)
+                break;
+
             ShowNotification($"The time is {DateTime.Now:HH:mm}. Break time finished!");
         }
+
         ExitApp();
     }
 
@@ -46,9 +59,26 @@ class Program
         while (_running)
         {
             var now = DateTime.Now;
-            if (now.Minute == 0 || now.Minute == 30)
+
+            bool isReminderTime =
+                now.Minute == 0 ||
+                now.Minute == 30;
+
+            var slot = new DateTime(
+                now.Year,
+                now.Month,
+                now.Day,
+                now.Hour,
+                now.Minute,
+                0);
+
+            if (isReminderTime && lastTriggered != slot)
+            {
+                lastTriggered = slot;
                 return;
-            await Task.Delay(10000); // ✅ Keeps async behavior
+            }
+
+            await Task.Delay(10000);
         }
     }
 
@@ -61,16 +91,23 @@ class Program
     {
         trayIcon = new NotifyIcon()
         {
-            Icon = SystemIcons.Information,
+            Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath),
             Visible = true,
             Text = "Break Reminder"
         };
 
+
         var contextMenu = new ContextMenuStrip();
-        var exitItem = new ToolStripMenuItem("Exit", null, (sender, e) => ExitApp());
+
+        var exitItem = new ToolStripMenuItem(
+            "Exit",
+            null,
+            (sender, e) => ExitApp());
+
         contextMenu.Items.Add(exitItem);
+
         trayIcon.ContextMenuStrip = contextMenu;
-        trayIcon.MouseClick += TrayIcon_MouseClick; // ✅ Handle right-click
+        trayIcon.MouseClick += TrayIcon_MouseClick;
     }
 
     static void TrayIcon_MouseClick(object sender, MouseEventArgs e)
@@ -84,8 +121,13 @@ class Program
     static void ExitApp()
     {
         _running = false;
-        trayIcon.Visible = false;
-        trayIcon.Dispose();
+
+        if (trayIcon != null)
+        {
+            trayIcon.Visible = false;
+            trayIcon.Dispose();
+        }
+
         Environment.Exit(0);
     }
 }
