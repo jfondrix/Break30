@@ -3,6 +3,8 @@ using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Drawing;
+using System.IO;
+using System.Text.Json;
 
 class Program
 {
@@ -10,6 +12,23 @@ class Program
     private static bool _running = true;
     private static DateTime? lastTriggered = null;
     private static DateTime pauseUntil = DateTime.MinValue;
+    private static Settings settings = new Settings();
+    private static Random random = new Random();
+
+    class Settings
+    {
+        public int breakLengthMinutes { get; set; } = 3;
+        public int idleSecondsBeforeFullscreen { get; set; } = 10;
+        public int watchForIdleSeconds { get; set; } = 60;
+        public string[] notificationMessages { get; set; } =
+        {
+            "Stand up now.",
+            "Time to move.",
+            "Walk around.",
+            "Stretch your legs.",
+            "Take a short break."
+        };
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     struct LASTINPUTINFO
@@ -27,11 +46,23 @@ class Program
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
 
+        LoadSettings();
         CreateTrayIcon();
 
         Task.Run(ReminderLoop);
 
         Application.Run();
+    }
+
+    static void LoadSettings()
+    {
+        string path = Path.Combine(AppContext.BaseDirectory, "settings.json");
+
+        if (File.Exists(path))
+        {
+            string json = File.ReadAllText(path);
+            settings = JsonSerializer.Deserialize<Settings>(json) ?? new Settings();
+        }
     }
 
     static async Task ReminderLoop()
@@ -53,29 +84,28 @@ class Program
         }
     }
 
-
-static async Task StartBreak()
-{
-    ShowNotification("Stand up now.");
-
-    DateTime deadline = DateTime.Now.AddMinutes(1);
-
-    while (DateTime.Now < deadline)
+    static async Task StartBreak()
     {
-        if (!_running)
-            return;
+        string message = settings.notificationMessages[random.Next(settings.notificationMessages.Length)];
+        ShowNotification(message);
 
-        if (GetIdleTime() >= TimeSpan.FromSeconds(10))
+        DateTime deadline = DateTime.Now.AddSeconds(settings.watchForIdleSeconds);
+
+        while (DateTime.Now < deadline)
         {
-            ShowFullscreenBreakTimer(TimeSpan.FromMinutes(3));
-            return;
+            if (!_running)
+                return;
+
+            if (GetIdleTime() >= TimeSpan.FromSeconds(settings.idleSecondsBeforeFullscreen))
+            {
+                ShowFullscreenBreakTimer(TimeSpan.FromMinutes(settings.breakLengthMinutes));
+                return;
+            }
+
+            await Task.Delay(1000);
         }
-
-        await Task.Delay(1000);
     }
-}
 
- 
     static TimeSpan GetIdleTime()
     {
         LASTINPUTINFO info = new LASTINPUTINFO();
@@ -110,77 +140,78 @@ static async Task StartBreak()
         }
     }
 
-static void ShowFullscreenBreakTimer(TimeSpan duration)
-{
-    Form form = new Form();
-    Label label = new Label();
-    Label instruction = new Label();
-
-    form.FormBorderStyle = FormBorderStyle.None;
-    form.WindowState = FormWindowState.Maximized;
-    form.BackColor = Color.Black;
-    form.TopMost = true;
-    form.ShowInTaskbar = false;
-    form.KeyPreview = true;
-
-    label.ForeColor = Color.White;
-    label.BackColor = Color.Black;
-    label.Font = new Font("Segoe UI", 96, FontStyle.Bold);
-    label.Dock = DockStyle.Fill;
-    label.TextAlign = ContentAlignment.MiddleCenter;
-
-    instruction.ForeColor = Color.Gray;
-    instruction.BackColor = Color.Black;
-    instruction.Font = new Font("Segoe UI", 18, FontStyle.Regular);
-    instruction.Dock = DockStyle.Bottom;
-    instruction.Height = 80;
-    instruction.TextAlign = ContentAlignment.MiddleCenter;
-    instruction.Text = "Move mouse or press Esc to return";
-
-    form.Controls.Add(label);
-    form.Controls.Add(instruction);
-
-    DateTime endTime = DateTime.Now.Add(duration);
-    Point startMousePosition = Cursor.Position;
-
-    System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
-    timer.Interval = 250;
-
-    timer.Tick += (sender, e) =>
+    static void ShowFullscreenBreakTimer(TimeSpan duration)
     {
-        if (Math.Abs(Cursor.Position.X - startMousePosition.X) > 8 ||
-            Math.Abs(Cursor.Position.Y - startMousePosition.Y) > 8)
+        Form form = new Form();
+        Label label = new Label();
+        Label instruction = new Label();
+
+        form.FormBorderStyle = FormBorderStyle.None;
+        form.WindowState = FormWindowState.Maximized;
+        form.BackColor = Color.Black;
+        form.TopMost = true;
+        form.ShowInTaskbar = false;
+        form.KeyPreview = true;
+
+        label.ForeColor = Color.White;
+        label.BackColor = Color.Black;
+        label.Font = new Font("Segoe UI", 96, FontStyle.Bold);
+        label.Dock = DockStyle.Fill;
+        label.TextAlign = ContentAlignment.MiddleCenter;
+
+        instruction.ForeColor = Color.Gray;
+        instruction.BackColor = Color.Black;
+        instruction.Font = new Font("Segoe UI", 18, FontStyle.Regular);
+        instruction.Dock = DockStyle.Bottom;
+        instruction.Height = 80;
+        instruction.TextAlign = ContentAlignment.MiddleCenter;
+        instruction.Text = "Move mouse or press Esc to return";
+
+        form.Controls.Add(label);
+        form.Controls.Add(instruction);
+
+        DateTime endTime = DateTime.Now.Add(duration);
+        Point startMousePosition = Cursor.Position;
+
+        System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
+        timer.Interval = 250;
+
+        timer.Tick += (sender, e) =>
         {
-            timer.Stop();
-            form.Close();
-            return;
-        }
+            if (Math.Abs(Cursor.Position.X - startMousePosition.X) > 8 ||
+                Math.Abs(Cursor.Position.Y - startMousePosition.Y) > 8)
+            {
+                timer.Stop();
+                form.Close();
+                return;
+            }
 
-        TimeSpan remaining = endTime - DateTime.Now;
+            TimeSpan remaining = endTime - DateTime.Now;
 
-        if (remaining <= TimeSpan.Zero)
+            if (remaining <= TimeSpan.Zero)
+            {
+                timer.Stop();
+                form.Close();
+                return;
+            }
+
+            label.Text = remaining.ToString(@"mm\:ss");
+        };
+
+        form.KeyDown += (sender, e) =>
         {
-            timer.Stop();
-            form.Close();
-            return;
-        }
+            if (e.KeyCode == Keys.Escape)
+            {
+                timer.Stop();
+                form.Close();
+            }
+        };
 
-        label.Text = remaining.ToString(@"mm\:ss");
-    };
+        label.Text = duration.ToString(@"mm\:ss");
+        timer.Start();
+        form.ShowDialog();
+    }
 
-    form.KeyDown += (sender, e) =>
-    {
-        if (e.KeyCode == Keys.Escape)
-        {
-            timer.Stop();
-            form.Close();
-        }
-    };
-
-    label.Text = duration.ToString(@"mm\:ss");
-    timer.Start();
-    form.ShowDialog();
-}
     static void ShowNotification(string message)
     {
         trayIcon.BalloonTipTitle = "";

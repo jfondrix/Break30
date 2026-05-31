@@ -1,0 +1,13 @@
+{
+  "breakIntervalMinutes": 30,
+  "breakLengthMinutes": 3,
+  "idleSecondsBeforeFullscreen": 10,
+  "watchForIdleSeconds": 60,
+  "notificationMessages": [
+    "Stand up now.",
+    "Time to move.",
+    "Walk around.",
+    "Stretch your legs.",
+    "Take a short break."
+  ]
+}
