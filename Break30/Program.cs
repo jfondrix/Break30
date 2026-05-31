@@ -6,13 +6,20 @@ using System.Drawing;
 
 class Program
 {
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    public static extern int MessageBox(IntPtr hWnd, string text, string caption, uint type);
-
     private static NotifyIcon trayIcon;
     private static bool _running = true;
     private static DateTime? lastTriggered = null;
     private static DateTime pauseUntil = DateTime.MinValue;
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct LASTINPUTINFO
+    {
+        public uint cbSize;
+        public uint dwTime;
+    }
+
+    [DllImport("user32.dll")]
+    static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
 
     [STAThread]
     static void Main()
@@ -46,32 +53,31 @@ class Program
         }
     }
 
-/*
     static async Task StartBreak()
     {
-        ShowNotification($"The time is {DateTime.Now:HH:mm}. Good time for a break!");
+        ShowNotification("Stand up now.");
 
-        await Task.Delay(TimeSpan.FromMinutes(3));
+        await Task.Delay(TimeSpan.FromSeconds(10));
 
         if (!_running)
             return;
 
-        ShowNotification($"The time is {DateTime.Now:HH:mm}. Break time finished!");
+        if (GetIdleTime() >= TimeSpan.FromSeconds(10))
+        {
+            ShowFullscreenBreakTimer(TimeSpan.FromMinutes(3));
+        }
     }
-*/
 
-    static async Task StartBreak()
+    static TimeSpan GetIdleTime()
     {
-        ShowNotification("Break started. 3 minutes.");
+        LASTINPUTINFO info = new LASTINPUTINFO();
+        info.cbSize = (uint)Marshal.SizeOf(info);
 
-        await Task.Delay(TimeSpan.FromMinutes(3));
+        GetLastInputInfo(ref info);
 
-        if (!_running)
-            return;
-
-        ShowNotification("Break finished.");
+        uint idleTicks = ((uint)Environment.TickCount - info.dwTime);
+        return TimeSpan.FromMilliseconds(idleTicks);
     }
-
 
     static async Task WaitUntilNextReminder()
     {
@@ -96,12 +102,77 @@ class Program
         }
     }
 
-/*
-    static void ShowNotification(string message)
+static void ShowFullscreenBreakTimer(TimeSpan duration)
+{
+    Form form = new Form();
+    Label label = new Label();
+    Label instruction = new Label();
+
+    form.FormBorderStyle = FormBorderStyle.None;
+    form.WindowState = FormWindowState.Maximized;
+    form.BackColor = Color.Black;
+    form.TopMost = true;
+    form.ShowInTaskbar = false;
+    form.KeyPreview = true;
+
+    label.ForeColor = Color.White;
+    label.BackColor = Color.Black;
+    label.Font = new Font("Segoe UI", 96, FontStyle.Bold);
+    label.Dock = DockStyle.Fill;
+    label.TextAlign = ContentAlignment.MiddleCenter;
+
+    instruction.ForeColor = Color.Gray;
+    instruction.BackColor = Color.Black;
+    instruction.Font = new Font("Segoe UI", 18, FontStyle.Regular);
+    instruction.Dock = DockStyle.Bottom;
+    instruction.Height = 80;
+    instruction.TextAlign = ContentAlignment.MiddleCenter;
+    instruction.Text = "Move mouse or press Esc to return";
+
+    form.Controls.Add(label);
+    form.Controls.Add(instruction);
+
+    DateTime endTime = DateTime.Now.Add(duration);
+    Point startMousePosition = Cursor.Position;
+
+    System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
+    timer.Interval = 250;
+
+    timer.Tick += (sender, e) =>
     {
-        MessageBox(IntPtr.Zero, message, "Break30", 0);
-    }
-*/
+        if (Math.Abs(Cursor.Position.X - startMousePosition.X) > 8 ||
+            Math.Abs(Cursor.Position.Y - startMousePosition.Y) > 8)
+        {
+            timer.Stop();
+            form.Close();
+            return;
+        }
+
+        TimeSpan remaining = endTime - DateTime.Now;
+
+        if (remaining <= TimeSpan.Zero)
+        {
+            timer.Stop();
+            form.Close();
+            return;
+        }
+
+        label.Text = remaining.ToString(@"mm\:ss");
+    };
+
+    form.KeyDown += (sender, e) =>
+    {
+        if (e.KeyCode == Keys.Escape)
+        {
+            timer.Stop();
+            form.Close();
+        }
+    };
+
+    label.Text = duration.ToString(@"mm\:ss");
+    timer.Start();
+    form.ShowDialog();
+}
     static void ShowNotification(string message)
     {
         trayIcon.BalloonTipTitle = "Break30";
@@ -131,7 +202,7 @@ class Program
             (sender, e) =>
             {
                 pauseUntil = DateTime.Now.AddHours(1);
-                ShowNotification("Break reminders paused for 1 hour.");
+                ShowNotification("Paused for 1 hour.");
             });
 
         var pause2HoursItem = new ToolStripMenuItem(
@@ -140,7 +211,7 @@ class Program
             (sender, e) =>
             {
                 pauseUntil = DateTime.Now.AddHours(2);
-                ShowNotification("Break reminders paused for 2 hours.");
+                ShowNotification("Paused for 2 hours.");
             });
 
         var exitItem = new ToolStripMenuItem(
