@@ -30,6 +30,12 @@ class Program
             "Stretch your legs.",
             "Take a short break."
         };
+        public string[] breakScreenMessages { get; set; } =
+        {
+            "Increase energy by movement",
+            "Activate your brain by movement",
+            "Sedentary life drains\n.... Move ....",
+        };
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -112,7 +118,8 @@ static async Task StartBreak()
 
         if (GetIdleTime() >= TimeSpan.FromSeconds(settings.idleSecondsBeforeFullscreen))
         {
-            ShowFullscreenBreakTimer(TimeSpan.FromMinutes(settings.breakLengthMinutes));
+            string breakScreenMessage = settings.breakScreenMessages[random.Next(settings.breakScreenMessages.Length)];
+            ShowFullscreenBreakTimer(TimeSpan.FromMinutes(settings.breakLengthMinutes), breakScreenMessage);
             return;
         }
 
@@ -157,11 +164,12 @@ static async Task StartBreak()
         }
     }
 
-    static void ShowFullscreenBreakTimer(TimeSpan duration)
+    static void ShowFullscreenBreakTimer(TimeSpan duration, string message)
     {
         Form form = new Form();
         Label label = new Label();
         Label instruction = new Label();
+        Label messageLabel = new Label();
 
         form.FormBorderStyle = FormBorderStyle.None;
         form.WindowState = FormWindowState.Maximized;
@@ -169,6 +177,14 @@ static async Task StartBreak()
         form.TopMost = true;
         form.ShowInTaskbar = false;
         form.KeyPreview = true;
+
+        messageLabel.ForeColor = Color.MediumSpringGreen;
+        messageLabel.BackColor = Color.Black;
+        messageLabel.Font = new Font("Segoe UI", 32, FontStyle.Bold);
+        messageLabel.Dock = DockStyle.Top;
+        messageLabel.Height = 220;
+        messageLabel.TextAlign = ContentAlignment.MiddleCenter;
+        messageLabel.Text = message;
 
         label.ForeColor = Color.White;
         label.BackColor = Color.Black;
@@ -185,6 +201,7 @@ static async Task StartBreak()
         instruction.Text = "Move mouse or press Esc to return";
 
         form.Controls.Add(label);
+        form.Controls.Add(messageLabel);
         form.Controls.Add(instruction);
 
         DateTime endTime = DateTime.Now.Add(duration);

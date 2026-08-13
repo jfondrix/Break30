@@ -9,5 +9,10 @@
     "Walk around.",
     "Stretch your legs.",
     "Take a short break."
+  ],
+  "breakScreenMessages": [
+    "Increase energy by movement",
+    "Activate your brain by movement",
+    "Sedentary life drains\n.... Move ...."
   ]
 }
