@@ -1,5 +1,5 @@
 #define MyAppName "Break30"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.2.0"
 #define MyAppPublisher "Visiko Srlu"
 #define MyAppURL "https://github.com/jfondrix/Break30"
 #define MyAppExeName "Break30.exe"
@@ -20,7 +20,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 OutputDir=C:\Apps\Break30-installer
-OutputBaseFilename=Break30Setup-v0.1.0
+OutputBaseFilename=Break30Setup-v0.2.0
 SolidCompression=yes
 WizardStyle=modern
 
