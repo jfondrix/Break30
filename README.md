@@ -5,6 +5,7 @@ Comes as tray icon, you can right click to exit.
 
 
 Reminders stop at the end of the working day (18:30 local time by default).
-To change it, edit `stopRemindersAt` in `settings.json` next to `Break30.exe`
-(for example `"17:00"`), or set it to `""` to keep reminding all day, then restart Break30.
+To change it, right-click the tray icon and pick **Stop Reminders At** (a preset time,
+**Custom...**, or **Never**). The choice is saved to `stopRemindersAt` in `settings.json`
+next to `Break30.exe`, which you can also edit by hand (restart Break30 afterwards).
 "Start Break Now" from the tray menu still works after the cutoff.

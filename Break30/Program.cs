@@ -5,6 +5,8 @@ using System.Windows.Forms;
 using System.Drawing;
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Globalization;
 
 class Program
 {
@@ -171,14 +173,146 @@ static async Task StartBreak()
 
     static bool IsPastEndOfDay(DateTime now)
     {
-        if (string.IsNullOrWhiteSpace(settings.stopRemindersAt))
+        return TryGetCutoff(settings.stopRemindersAt, out TimeSpan cutoff) && now.TimeOfDay >= cutoff;
+    }
+
+    static bool TryGetCutoff(string value, out TimeSpan cutoff)
+    {
+        cutoff = TimeSpan.Zero;
+
+        if (string.IsNullOrWhiteSpace(value))
             return false;
 
-        if (!TimeSpan.TryParseExact(settings.stopRemindersAt.Trim(), new[] { @"h\:mm", @"hh\:mm" },
-                System.Globalization.CultureInfo.InvariantCulture, out TimeSpan cutoff))
-            return false;
+        return TimeSpan.TryParseExact(value.Trim(), new[] { @"h\:mm", @"hh\:mm" },
+            CultureInfo.InvariantCulture, out cutoff);
+    }
 
-        return now.TimeOfDay >= cutoff;
+    static ToolStripMenuItem CreateStopRemindersMenu()
+    {
+        var menu = new ToolStripMenuItem("Stop Reminders At");
+        string[] presets = { "17:00", "17:30", "18:00", "18:30", "19:00", "20:00" };
+
+        foreach (string preset in presets)
+        {
+            var item = new ToolStripMenuItem(preset) { Tag = preset };
+            item.Click += (sender, e) => SetStopRemindersAt(preset);
+            menu.DropDownItems.Add(item);
+        }
+
+        var customItem = new ToolStripMenuItem("Custom...");
+        customItem.Click += (sender, e) =>
+        {
+            string chosen = AskForCutoffTime();
+            if (chosen != null)
+                SetStopRemindersAt(chosen);
+        };
+
+        var neverItem = new ToolStripMenuItem("Never (remind all day)") { Tag = "" };
+        neverItem.Click += (sender, e) => SetStopRemindersAt("");
+
+        menu.DropDownItems.Add(new ToolStripSeparator());
+        menu.DropDownItems.Add(customItem);
+        menu.DropDownItems.Add(neverItem);
+
+        menu.DropDownOpening += (sender, e) =>
+        {
+            bool hasCutoff = TryGetCutoff(settings.stopRemindersAt, out TimeSpan cutoff);
+            string current = hasCutoff ? cutoff.ToString(@"hh\:mm") : "";
+            bool matchedPreset = false;
+
+            foreach (ToolStripItem entry in menu.DropDownItems)
+            {
+                if (entry is ToolStripMenuItem menuItem && menuItem.Tag is string tag)
+                {
+                    menuItem.Checked = tag == current;
+                    matchedPreset |= menuItem.Checked;
+                }
+            }
+
+            customItem.Checked = !matchedPreset;
+            customItem.Text = !matchedPreset ? $"Custom ({current})..." : "Custom...";
+        };
+
+        return menu;
+    }
+
+    static string AskForCutoffTime()
+    {
+        using var form = new Form
+        {
+            Text = "Stop reminders at",
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            StartPosition = FormStartPosition.CenterScreen,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            TopMost = true,
+            ClientSize = new Size(260, 110)
+        };
+
+        var picker = new DateTimePicker
+        {
+            Format = DateTimePickerFormat.Custom,
+            CustomFormat = "HH:mm",
+            ShowUpDown = true,
+            Location = new Point(20, 20),
+            Width = 220
+        };
+
+        TimeSpan initial = TryGetCutoff(settings.stopRemindersAt, out TimeSpan cutoff)
+            ? cutoff
+            : new TimeSpan(18, 30, 0);
+        picker.Value = DateTime.Today.Add(initial);
+
+        var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, Location = new Point(84, 65), Width = 75 };
+        var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Location = new Point(165, 65), Width = 75 };
+
+        form.Controls.Add(picker);
+        form.Controls.Add(ok);
+        form.Controls.Add(cancel);
+        form.AcceptButton = ok;
+        form.CancelButton = cancel;
+
+        if (form.ShowDialog() != DialogResult.OK)
+            return null;
+
+        return picker.Value.ToString("HH:mm", CultureInfo.InvariantCulture);
+    }
+
+    static void SetStopRemindersAt(string value)
+    {
+        settings.stopRemindersAt = value;
+
+        bool saved = SaveSetting("stopRemindersAt", value);
+
+        string message = string.IsNullOrEmpty(value)
+            ? "Reminders will run all day."
+            : $"Reminders stop at {value}.";
+
+        if (!saved)
+            message += " (Couldn't save to settings.json, so this lasts until Break30 restarts.)";
+
+        ShowNotification(message);
+    }
+
+    static bool SaveSetting(string key, string value)
+    {
+        try
+        {
+            string path = Path.Combine(AppContext.BaseDirectory, "settings.json");
+
+            JsonObject root = File.Exists(path)
+                ? JsonNode.Parse(File.ReadAllText(path)) as JsonObject ?? new JsonObject()
+                : new JsonObject();
+
+            root[key] = value;
+
+            File.WriteAllText(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     static void ShowFullscreenBreakTimer(TimeSpan duration, string message)
@@ -316,6 +450,8 @@ static async Task StartBreak()
         contextMenu.Items.Add(new ToolStripSeparator());
         contextMenu.Items.Add(pause1HourItem);
         contextMenu.Items.Add(pause2HoursItem);
+        contextMenu.Items.Add(new ToolStripSeparator());
+        contextMenu.Items.Add(CreateStopRemindersMenu());
         contextMenu.Items.Add(new ToolStripSeparator());
         contextMenu.Items.Add(exitItem);
 
