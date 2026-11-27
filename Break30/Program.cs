@@ -22,6 +22,9 @@ class Program
         public int breakLengthMinutes { get; set; } = 3;
         public int idleSecondsBeforeFullscreen { get; set; } = 10;
         public int watchForIdleSeconds { get; set; } = 60;
+        // Local time (HH:mm) after which no automatic break reminders are shown.
+        // Set to "" or null to keep reminding all day.
+        public string stopRemindersAt { get; set; } = "18:30";
         public string[] notificationMessages { get; set; } =
         {
             "Stand up now.",
@@ -157,11 +160,25 @@ static async Task StartBreak()
             if (isReminderTime && lastTriggered != slot)
             {
                 lastTriggered = slot;
-                return;
+
+                if (!IsPastEndOfDay(now))
+                    return;
             }
 
             await Task.Delay(10000);
         }
+    }
+
+    static bool IsPastEndOfDay(DateTime now)
+    {
+        if (string.IsNullOrWhiteSpace(settings.stopRemindersAt))
+            return false;
+
+        if (!TimeSpan.TryParseExact(settings.stopRemindersAt.Trim(), new[] { @"h\:mm", @"hh\:mm" },
+                System.Globalization.CultureInfo.InvariantCulture, out TimeSpan cutoff))
+            return false;
+
+        return now.TimeOfDay >= cutoff;
     }
 
     static void ShowFullscreenBreakTimer(TimeSpan duration, string message)

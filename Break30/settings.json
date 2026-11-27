@@ -3,6 +3,7 @@
   "breakLengthMinutes": 3,
   "idleSecondsBeforeFullscreen": 10,
   "watchForIdleSeconds": 60,
+  "stopRemindersAt": "18:30",
   "notificationMessages": [
     "Stand up now.",
     "Time to move.",
